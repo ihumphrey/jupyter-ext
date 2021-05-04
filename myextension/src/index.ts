@@ -1,10 +1,17 @@
 import {
+  ILayoutRestorer,
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 
-import { ICommandPalette, MainAreaWidget } from '@jupyterlab/apputils';
+import { 
+  ICommandPalette,
+  MainAreaWidget,
+  WidgetTracker 
+} from '@jupyterlab/apputils';
+
 import { Message } from '@lumino/messaging';
+
 import { Widget } from '@lumino/widgets';
 
 interface APODResponse {
@@ -88,30 +95,55 @@ class APODWidget extends Widget {
 /**
  * Activate the APOD widget extension
  */
-function activate(app: JupyterFrontEnd, palette: ICommandPalette) {
+function activate(
+  app: JupyterFrontEnd,
+  palette: ICommandPalette,
+  restorer: ILayoutRestorer) {
+
   console.log('JupyterLab extension myextension is activated!');
 
-  // create a single widget
-  const content = new APODWidget();
-  const widget = new MainAreaWidget({content});
-  widget.id = 'apod-jupyterlab';
-  widget.title.label = 'Astronomy Picture';
-  widget.title.closable = true;
+  // declare widget
+  let widget: MainAreaWidget<APODWidget>;
 
-  // add an application command
+  // add application commoand
   const command: string = 'apod:open';
   app.commands.addCommand(command, {
     label: 'Random Astronomy Picture',
     execute: () => {
+      if (!widget || widget.isDisposed) {
+        // create new widget if one does not exist
+        // or if the previous one was disposed after closing the panel
+        const content = new APODWidget();
+        widget = new MainAreaWidget({content});
+        widget.id = 'apod-jupyterlab';
+        widget.title.label = 'Astronomy Picture';
+        widget.title.closable = true;
+      }
+      if (!tracker.has(widget)) {
+        // track the state of the widget for later restoration
+        tracker.add(widget);
+      }
       if (!widget.isAttached) {
         app.shell.add(widget, 'main');
       }
-      content.update();
+      widget.content.update();
+
+      // activate the widget
       app.shell.activateById(widget.id);
     }
   });
 
+  // add command to palette
   palette.addItem({ command, category: 'Tutorial' });
+
+  // track and restore widget state
+  let tracker = new WidgetTracker<MainAreaWidget<APODWidget>>({
+    namespace: 'apod'
+  });
+  restorer.restore(tracker, {
+    command,
+    name: () => 'apod'
+  });
 }
 
 /**
@@ -120,7 +152,7 @@ function activate(app: JupyterFrontEnd, palette: ICommandPalette) {
 const extension: JupyterFrontEndPlugin<void> = {
   id: 'myextension:plugin',
   autoStart: true,
-  requires: [ICommandPalette],
+  requires: [ICommandPalette, ILayoutRestorer],
   activate: activate,
 };
 
